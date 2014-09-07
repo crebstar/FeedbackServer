@@ -1,16 +1,19 @@
 #include "UDPServer.hpp"
-
-
 #include <stdio.h>
 #include <iostream>
 
 #include <vector>
+#include <random>
+#include <time.h>
 #include <algorithm> 
 #include <functional> 
 #include <cctype>
 #include <locale>
 
+#include "ConnectedUDPClient.hpp"
+
 #include "../../CBEngine/EngineCode/TimeUtil.hpp"
+#include "../../CBEngine/EngineCode/MathUtil.hpp"
 
 UDPServer::~UDPServer() {
 
@@ -19,17 +22,23 @@ UDPServer::~UDPServer() {
 
 UDPServer::UDPServer( const std::string& ipAddress, const std::string& portNumber ) {
 
+	m_thresholdForPacketLossSimulation = 1.00f;
+
 	m_IPAddress = ipAddress;
 	m_PortNumber = portNumber;
+
+	m_durationSinceLastUserConnectedUpdate = 0.0;
+	m_durationSinceLastPacketUpdate = 0.0;
+	
+	m_currentAckCount = 0;
+
+	srand( time( nullptr ) );
 }
 
 
 void UDPServer::initialize() {
 
 	printf( "\n\nAttempting to create UDP Server with IP: %s and Port: %s \n", m_IPAddress.c_str(), m_PortNumber.c_str() );
-
-	m_durationSinceLastUserConnectedUpdate = 0.0;
-	m_durationSinceLastPacketUpdate = 0.0;
 
 	WSAData wsaData;
 	int winSockResult = 0;
@@ -132,6 +141,7 @@ void UDPServer::run() {
 		} 
 
 		sendPlayerDataToClients();
+		checkForExpiredReliablePacketsWithNoAcks();
 	} 
 
 	WSACleanup();
@@ -161,12 +171,31 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 	if ( itClient != m_clients.end() ) {
 
 		// Update existing client
-		ConnectedUDPClient* client = itClient->second;
-		double currentTimeInSeconds = cbutil::getCurrentTimeSeconds();
-		client->m_timeStampSecondsForLastPacketReceived = currentTimeInSeconds;
-		client->m_position.x = playerData.m_xPos;
-		client->m_position.y = playerData.m_yPos;
+		if ( playerData.m_packetID == RELIABLE_ACK_ID ) {
 
+			double currentTimeInSeconds = cbutil::getCurrentTimeSeconds();
+			int ackCountID = playerData.m_packetAckID;
+
+			ConnectedUDPClient* client = itClient->second;
+			client->m_timeStampSecondsForLastPacketReceived = currentTimeInSeconds;
+
+			std::map<int,PlayerDataPacket>::iterator itAck;
+			itAck = client->m_reliablePacketsSentButNotAcked.find( ackCountID );
+			if ( itAck != client->m_reliablePacketsSentButNotAcked.end() ) {
+
+				client->m_reliablePacketsSentButNotAcked.erase( itAck );
+			}
+
+		} else {
+
+			// Terrible 
+			ConnectedUDPClient* client = itClient->second;
+			double currentTimeInSeconds = cbutil::getCurrentTimeSeconds();
+			client->m_timeStampSecondsForLastPacketReceived = currentTimeInSeconds;
+			client->m_position.x = playerData.m_xPos;
+			client->m_position.y = playerData.m_yPos;
+		}
+	
 	} else {
 
 		double currentTimeInSeconds = cbutil::getCurrentTimeSeconds();
@@ -268,7 +297,12 @@ void UDPServer::sendPlayerDataToClients() {
 			playerData.m_green = client->m_green;
 			playerData.m_blue = client->m_blue;
 
-			playerPackets.push_back( playerData );
+			// TESTING FOR NOW
+			++m_currentAckCount;
+			playerData.m_packetAckID = m_currentAckCount;
+
+			// Old
+			//playerPackets.push_back( playerData );
 		}
 
 		std::map<std::string,ConnectedUDPClient*>::iterator itClientPacket;
@@ -280,7 +314,19 @@ void UDPServer::sendPlayerDataToClients() {
 
 				PlayerDataPacket& packetToSend = playerPackets[i];
 
-				winSockSendResult = sendto( m_listenSocket, (char*) &packetToSend, sizeof( packetToSend ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
+				double currentTimeSeconds = cbutil::getCurrentTimeSeconds();
+				packetToSend.m_packetTimeStamp = currentTimeSeconds;
+				client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,PlayerDataPacket>( packetToSend.m_packetAckID, packetToSend ) );
+
+				float randomNumberZeroToOne = cbengine::getRandomZeroToOne();
+				if ( randomNumberZeroToOne < m_thresholdForPacketLossSimulation ) {
+					// Send 
+					winSockSendResult = sendto( m_listenSocket, (char*) &packetToSend, sizeof( packetToSend ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
+
+				} else {
+					// Don't send but act like we did
+					// Leaving this block for testing purposes
+				}
 
 				if ( winSockSendResult == SOCKET_ERROR ) {
 
@@ -328,4 +374,33 @@ void UDPServer::displayConnectedUsers() {
 	}
 
 	lastTimeStampSeconds = currentTimeSeconds;
+}
+
+
+void UDPServer::checkForExpiredReliablePacketsWithNoAcks() {
+
+	double currentTimeSeconds = cbutil::getCurrentTimeSeconds();
+
+	std::map<std::string,ConnectedUDPClient*>::iterator itClient;
+	for ( itClient = m_clients.begin(); itClient != m_clients.end(); ++itClient ) {
+
+		ConnectedUDPClient* client = itClient->second;
+
+		std::map<int,PlayerDataPacket>::iterator itRel;
+		for ( itRel = client->m_reliablePacketsSentButNotAcked.begin(); itRel != client->m_reliablePacketsSentButNotAcked.end(); ++itRel ) {
+
+			int ackCountIDForPacket = itRel->first;
+			PlayerDataPacket& packet = itRel->second;
+			double timeStampForSendPacket = packet.m_packetTimeStamp;
+
+			double timeDifSeconds = currentTimeSeconds - timeStampForSendPacket;
+
+			if ( timeDifSeconds > TIME_THRESHOLD_TO_RESEND_RELIABLE_PACKETS ) {
+
+				packet.m_packetTimeStamp = currentTimeSeconds;
+				int winSockSendResult = 0;
+				winSockSendResult = sendto( m_listenSocket, (char*) &packet, sizeof( packet ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
+			}
+		}
+	}
 }

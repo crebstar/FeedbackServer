@@ -80,6 +80,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ConnectedUDPClient.hpp" />
+    <ClInclude Include="CS6Packet.hpp" />
     <ClInclude Include="UDPServer.hpp" />
   </ItemGroup>
   <ItemGroup>
