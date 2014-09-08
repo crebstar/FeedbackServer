@@ -235,6 +235,7 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 			printf( "ACK packet received from a new client!" );
 			printf( "A new client has been created: %s \n", combinedIPAndPort.c_str() );
 
+			++m_currentAckCount;
 			CS6Packet newPlayerResetPacket;
 			// Header
 			newPlayerResetPacket.packetType = TYPE_Reset;
@@ -242,6 +243,7 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 			newPlayerResetPacket.playerColorAndID[0] = client->m_red;
 			newPlayerResetPacket.playerColorAndID[1] = client->m_green;
 			newPlayerResetPacket.playerColorAndID[2] = client->m_blue;
+			newPlayerResetPacket.packetNumber = m_currentAckCount;
 
 			// Data
 			newPlayerResetPacket.data.reset.flagXPosition = m_flag.m_xPos;
@@ -251,8 +253,6 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 			newPlayerResetPacket.data.reset.playerColorAndID[0] = client->m_red;
 			newPlayerResetPacket.data.reset.playerColorAndID[1] = client->m_green;
 			newPlayerResetPacket.data.reset.playerColorAndID[2] = client->m_blue;
-
-			++m_currentAckCount;
 
 			client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,CS6Packet>( m_currentAckCount, newPlayerResetPacket ) );
 
