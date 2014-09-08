@@ -75,12 +75,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="ConnectedUDPClient.cpp" />
+    <ClCompile Include="CTFlag.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="UDPServer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ConnectedUDPClient.hpp" />
     <ClInclude Include="CS6Packet.hpp" />
+    <ClInclude Include="CTFlag.hpp" />
     <ClInclude Include="UDPServer.hpp" />
   </ItemGroup>
   <ItemGroup>

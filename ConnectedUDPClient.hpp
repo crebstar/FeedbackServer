@@ -17,6 +17,8 @@
 
 #include "UDPServer.hpp"
 
+#include "CS6Packet.hpp"
+
 class ConnectedUDPClient {
 public:
 	static int											s_numberOfClients;
@@ -27,15 +29,17 @@ public:
 	double												m_timeStampSecondsForLastPacketReceived;
 
 	cbengine::Vector2									m_position;
-	char												m_red;
-	char												m_green;
-	char												m_blue;
+	cbengine::Vector2									m_velocity;
+	float												m_orientationDegrees;
+	unsigned char										m_red;
+	unsigned char										m_green;
+	unsigned char										m_blue;
 
 	sockaddr_in											m_clientAddress;
 	std::string											m_userID;
 	int													m_playerID;
 
-	std::map<int,PlayerDataPacket>						m_reliablePacketsSentButNotAcked;
+	std::map<int,CS6Packet>								m_reliablePacketsSentButNotAcked;
 
 protected:
 

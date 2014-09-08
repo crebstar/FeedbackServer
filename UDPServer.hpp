@@ -13,6 +13,12 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include "CS6Packet.hpp"
+#include "CTFlag.hpp"
+
+const float ARENA_WIDTH = 500.0f;
+const float ARENA_HEIGHT = 500.0f;
+
 const char PLAYER_DATA_PACKET_ID = 2;
 const char PLAYER_EXIT_DATA_PACKET_ID = 4;
 const char RELIABLE_ACK_ID	= 30;
@@ -45,10 +51,10 @@ public:
 
 
 const int	 NEW_PLAYER_ACK_ID = 3;
-const double DURATION_THRESHOLD_FOR_DISCONECT = 5.0;
+const double DURATION_THRESHOLD_FOR_DISCONECT = 5000.0; // FOR TESTING
 const double TIME_DIF_SECONDS_FOR_USER_DISPLAY = 5.5;
 const double TIME_DIF_SECONDS_FOR_PACKET_UPDATE = 0.0045;
-const double TIME_THRESHOLD_TO_RESEND_RELIABLE_PACKETS = 0.500;
+const double TIME_THRESHOLD_TO_RESEND_RELIABLE_PACKETS = 0.350;
 
 class ConnectedUDPClient;
 
@@ -80,11 +86,12 @@ protected:
 	// Guarentee Delivery
 	float												m_thresholdForPacketLossSimulation;
 	int													m_currentAckCount;
+	CTFlag												m_flag;
 
 private:
 
 	void convertIPAndPortToSingleString( char* ipAddress, int portNumber, std::string& out_combinedIPAndPort );
-	void updateOrCreateNewClient( const std::string& combinedIPAndPort, const sockaddr_in& clientAddress, const PlayerDataPacket& playerData );
+	void updateOrCreateNewClient( const std::string& combinedIPAndPort, const sockaddr_in& clientAddress, const CS6Packet& playerData );
 	void checkForExpiredClients();
 	void displayConnectedUsers();
 

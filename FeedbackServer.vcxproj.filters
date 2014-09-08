@@ -16,6 +16,9 @@
     <ClCompile Include="ConnectedUDPClient.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="CTFlag.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="UDPServer.hpp">
@@ -25,6 +28,9 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="CS6Packet.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CTFlag.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
