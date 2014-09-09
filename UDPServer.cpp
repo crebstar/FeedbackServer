@@ -191,13 +191,14 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 
 			} else if ( playerData.data.acknowledged.packetType == TYPE_Victory ) {
 				// TODO::
-
+				
 			}
 
 		} else if ( playerData.packetType == TYPE_Victory ) {
-			// TODO::
+		
+			m_flag.resetPositionOfFlag( ARENA_WIDTH, ARENA_HEIGHT );
+			sendVictoryAndResetPacketToAllClients( playerData );
 			
-
 		} else if ( playerData.packetType == TYPE_Update ) {
 
 			ConnectedUDPClient* client = itClient->second;
@@ -269,6 +270,59 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 			printf( "WARNING-> Packet received from unrecognized client which is not an ACK for joining server" );
 		}
 	}
+}
+
+
+void UDPServer::sendVictoryAndResetPacketToAllClients( const CS6Packet& victoryPacketFromWinner ) {
+
+	CS6Packet victoryPacketToSend;
+	victoryPacketToSend.packetType = TYPE_Victory;
+	
+	victoryPacketToSend.timestamp = cbutil::getCurrentTimeSeconds();
+	victoryPacketToSend.data.victorious.playerColorAndID[0] = victoryPacketFromWinner.data.victorious.playerColorAndID[0];
+	victoryPacketToSend.data.victorious.playerColorAndID[1] = victoryPacketFromWinner.data.victorious.playerColorAndID[1];
+	victoryPacketToSend.data.victorious.playerColorAndID[2] = victoryPacketFromWinner.data.victorious.playerColorAndID[2];
+	
+
+	std::map<std::string,ConnectedUDPClient*>::iterator itClient;
+	for ( itClient = m_clients.begin(); itClient != m_clients.end(); ++itClient ) {
+
+		ConnectedUDPClient* client = itClient->second;
+		victoryPacketToSend.playerColorAndID[0] = client->m_red;
+		victoryPacketToSend.playerColorAndID[1] = client->m_green;
+		victoryPacketToSend.playerColorAndID[2] = client->m_blue;
+
+		++m_currentAckCount;
+		victoryPacketToSend.packetNumber = m_currentAckCount;
+
+		client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,CS6Packet>( victoryPacketToSend.packetNumber, victoryPacketToSend ) );
+
+		int winSockSendResult = 0;
+		winSockSendResult = sendto( m_listenSocket, (char*) &victoryPacketToSend, sizeof( CS6Packet ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
+
+		CS6Packet resetPacketToSend;
+		resetPacketToSend.packetType = TYPE_Reset;
+		resetPacketToSend.playerColorAndID[0] = client->m_red;
+		resetPacketToSend.playerColorAndID[1] = client->m_green;
+		resetPacketToSend.playerColorAndID[2] = client->m_blue;
+		resetPacketToSend.timestamp = cbutil::getCurrentTimeSeconds();
+		++m_currentAckCount;
+		resetPacketToSend.packetNumber = m_currentAckCount;
+
+		resetPacketToSend.data.reset.flagXPosition = m_flag.m_xPos;
+		resetPacketToSend.data.reset.flagYPosition = m_flag.m_yPos;
+		resetPacketToSend.data.reset.playerXPosition = client->m_position.x;
+		resetPacketToSend.data.reset.playerYPosition = client->m_position.y;
+		resetPacketToSend.data.reset.playerColorAndID[0] = client->m_red;
+		resetPacketToSend.data.reset.playerColorAndID[1] = client->m_green;
+		resetPacketToSend.data.reset.playerColorAndID[2] = client->m_blue;
+
+		client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,CS6Packet>( resetPacketToSend.packetNumber, resetPacketToSend ) );
+
+		winSockSendResult = sendto( m_listenSocket, (char*) &resetPacketToSend, sizeof( CS6Packet ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
+	}
+	
+	
 }
 
 
@@ -358,7 +412,7 @@ void UDPServer::sendPlayerDataToClients() {
 
 				CS6Packet& packetToSend = playerPackets[i];
 
-				// For this assignment we are not doung guarenteed delivery for updates
+				// For this assignment we are not doing guarenteed delivery for updates
 				//client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,PlayerDataPacket>( packetToSend.m_packetAckID, packetToSend ) );
 
 				//float randomNumberZeroToOne = cbengine::getRandomZeroToOne();
@@ -431,7 +485,7 @@ void UDPServer::checkForExpiredReliablePacketsWithNoAcks() {
 		std::map<int,CS6Packet>::iterator itRel;
 		for ( itRel = client->m_reliablePacketsSentButNotAcked.begin(); itRel != client->m_reliablePacketsSentButNotAcked.end(); ++itRel ) {
 
-			int ackCountIDForPacket = itRel->first;
+	int ackCountIDForPacket = itRel->first;
 			CS6Packet& packet = itRel->second;
 			double timeStampForSendPacket = packet.timestamp;
 

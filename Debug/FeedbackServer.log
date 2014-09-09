@@ -1,4 +1,4 @@
-﻿Build started 9/7/2014 9:22:40 PM.
+﻿Build started 9/8/2014 7:40:02 PM.
      1>Project "C:\Users\AW 18\Dropbox\GuildHall\Projects\FeedbackServer\FeedbackServer\FeedbackServer.vcxproj" on node 2 (build target(s)).
      1>InitializeBuildStatus:
          Creating "Debug\FeedbackServer.unsuccessfulbuild" because "AlwaysCreate" was specified.
@@ -30,4 +30,4 @@
 
 Build succeeded.
 
-Time Elapsed 00:00:01.78
+Time Elapsed 00:00:01.92
