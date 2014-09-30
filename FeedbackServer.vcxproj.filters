@@ -19,6 +19,12 @@
     <ClCompile Include="CTFlag.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="GameLobby.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GameRoom.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="UDPServer.hpp">
@@ -31,6 +37,12 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="CTFlag.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GameLobby.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GameRoom.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>

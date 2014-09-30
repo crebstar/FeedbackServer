@@ -76,6 +76,8 @@
   <ItemGroup>
     <ClCompile Include="ConnectedUDPClient.cpp" />
     <ClCompile Include="CTFlag.cpp" />
+    <ClCompile Include="GameLobby.cpp" />
+    <ClCompile Include="GameRoom.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="UDPServer.cpp" />
   </ItemGroup>
@@ -83,6 +85,8 @@
     <ClInclude Include="ConnectedUDPClient.hpp" />
     <ClInclude Include="CS6Packet.hpp" />
     <ClInclude Include="CTFlag.hpp" />
+    <ClInclude Include="GameLobby.hpp" />
+    <ClInclude Include="GameRoom.hpp" />
     <ClInclude Include="UDPServer.hpp" />
   </ItemGroup>
   <ItemGroup>

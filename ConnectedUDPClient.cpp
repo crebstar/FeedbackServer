@@ -14,6 +14,8 @@ ConnectedUDPClient::ConnectedUDPClient() {
 	++s_numberOfClients;
 	m_playerID = s_numberOfClients;
 	m_orientationDegrees = 0.0f;
+	m_isInLobby = false;
+	m_gameID = NOT_IN_GAME_ID;
 
 	assignColorForPlayer();
 }
@@ -59,7 +61,24 @@ void ConnectedUDPClient::assignColorForPlayer() {
 		m_green = 200;
 		m_blue = 200;
 
-	} 
+	} else if ( s_numberOfClients == 7 ) {
+
+		m_red = 100;
+		m_green = 150;
+		m_blue = 65;
+
+	} else if ( s_numberOfClients == 8 ) {
+
+		m_red = 50;
+		m_green = 200;
+		m_blue = 130;
+
+	} else if ( s_numberOfClients == 9 ) {
+
+		m_red = 250;
+		m_green = 50;
+		m_blue = 140;
+	}
 }
 
 

@@ -4,6 +4,7 @@
 
 #include <string>
 #include <map>
+#include <vector>
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -15,6 +16,7 @@
 
 #include "CS6Packet.hpp"
 #include "CTFlag.hpp"
+
 
 const float ARENA_WIDTH = 500.0f;
 const float ARENA_HEIGHT = 500.0f;
@@ -57,9 +59,14 @@ const double TIME_DIF_SECONDS_FOR_PACKET_UPDATE = 0.0045;
 const double TIME_THRESHOLD_TO_RESEND_RELIABLE_PACKETS = 0.350;
 
 class ConnectedUDPClient;
+class GameLobby;
+class GameRoom;
 
 class UDPServer {
 public:
+	friend class GameLobby;
+	friend class GameRoom;
+
 	~UDPServer();
 	explicit UDPServer( const std::string& ipAddress, const std::string& portNumber );
 
@@ -67,6 +74,10 @@ public:
 
 	void initialize();
 	void run();
+
+	void sendPacket( CS6Packet& packetToSend, ConnectedUDPClient* client, bool bIsReliable );
+
+
 
 protected:
 
@@ -86,6 +97,8 @@ protected:
 	// Guarentee Delivery
 	float												m_thresholdForPacketLossSimulation;
 	int													m_currentAckCount;
+
+	GameLobby*											m_lobby;
 	CTFlag												m_flag;
 
 private:
@@ -94,10 +107,7 @@ private:
 	void updateOrCreateNewClient( const std::string& combinedIPAndPort, const sockaddr_in& clientAddress, const CS6Packet& playerData );
 	void checkForExpiredClients();
 	void displayConnectedUsers();
-
-	void sendPlayerDataToClients();
-	void sendVictoryAndResetPacketToAllClients( const CS6Packet& victoryPacketFromWinner );
-
+	
 	// Guarenteed Delivery
 	void checkForExpiredReliablePacketsWithNoAcks();
 };

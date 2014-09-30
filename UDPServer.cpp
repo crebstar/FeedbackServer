@@ -11,12 +11,18 @@
 #include <locale>
 
 #include "ConnectedUDPClient.hpp"
+#include "GameLobby.hpp"
+#include "GameRoom.hpp"
 
 #include "../../CBEngine/EngineCode/TimeUtil.hpp"
 #include "../../CBEngine/EngineCode/MathUtil.hpp"
 
 UDPServer::~UDPServer() {
 
+	if ( m_lobby ) {
+
+		delete m_lobby;
+	}
 }
 
 
@@ -35,6 +41,8 @@ UDPServer::UDPServer( const std::string& ipAddress, const std::string& portNumbe
 	srand( time( nullptr ) );
 
 	m_flag.resetPositionOfFlag( ARENA_WIDTH, ARENA_HEIGHT );
+
+	m_lobby = new GameLobby( this );
 }
 
 
@@ -133,10 +141,13 @@ void UDPServer::run() {
 			std::string combinedIPAndPort;
 			convertIPAndPortToSingleString( connectedIP, portNumber, combinedIPAndPort );
 			updateOrCreateNewClient( combinedIPAndPort, clientSocketAddr, clientPacketReceived );
-	
 		} 
 
-		sendPlayerDataToClients();
+		if ( m_lobby ) {
+
+			m_lobby->updateLobby();
+		}
+
 		checkForExpiredReliablePacketsWithNoAcks();
 	} 
 
@@ -166,58 +177,17 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 
 	if ( itClient != m_clients.end() ) {
 
-		// Update existing client
-		if ( playerData.packetType == TYPE_Acknowledge ) {
-
-	
-			double currentTimeInSeconds = cbutil::getCurrentTimeSeconds();
-			int ackCountID = playerData.data.acknowledged.packetNumber;
-
-			ConnectedUDPClient* client = itClient->second;
-			client->m_timeStampSecondsForLastPacketReceived = currentTimeInSeconds;
-
-			if ( playerData.data.acknowledged.packetType == TYPE_Reset ) {
-
-				std::map<int,CS6Packet>::iterator itAck;
-				itAck = client->m_reliablePacketsSentButNotAcked.find( ackCountID );
-				if ( itAck != client->m_reliablePacketsSentButNotAcked.end() ) {
-
-					client->m_reliablePacketsSentButNotAcked.erase( itAck );
-
-				} else {
-
-					printf( "WARNING-> Could not find packet with corresponding AckCountID" );
-				}
-
-			} else if ( playerData.data.acknowledged.packetType == TYPE_Victory ) {
-				// TODO::
-				
-			}
-
-		} else if ( playerData.packetType == TYPE_Victory ) {
+		// ******************** Client Exists ******************** //
+		ConnectedUDPClient* client = itClient->second;
 		
-			m_flag.resetPositionOfFlag( ARENA_WIDTH, ARENA_HEIGHT );
-			sendVictoryAndResetPacketToAllClients( playerData );
-			
-		} else if ( playerData.packetType == TYPE_Update ) {
+		if ( m_lobby != nullptr ) {
 
-			ConnectedUDPClient* client = itClient->second;
-			double currentTimeInSeconds = cbutil::getCurrentTimeSeconds();
-			client->m_timeStampSecondsForLastPacketReceived = currentTimeInSeconds;
-			client->m_position.x = playerData.data.updated.xPosition;
-			client->m_position.y = playerData.data.updated.yPosition;
-			client->m_velocity.x = playerData.data.updated.xVelocity;
-			client->m_velocity.y = playerData.data.updated.yVelocity;
-			client->m_orientationDegrees = playerData.data.updated.yawDegrees;
-
-		} else if ( playerData.packetType == TYPE_Reset ) {
-
-			ConnectedUDPClient* client = itClient->second;
-			printf( "WARNING-> Received a packet of type Reset from the client. This is NOT allowed!\n" );
-			printf( "Packet received from client: %s\n", client->m_userID.c_str() );
+			m_lobby->OnClientPacketReceived( client, playerData );
 		}
-	
+		
 	} else {
+
+		// ******************** New Client ******************** //
 
 		if ( playerData.packetType == TYPE_Acknowledge ) {
 
@@ -237,32 +207,33 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 			printf( "A new client has been created: %s \n", combinedIPAndPort.c_str() );
 
 			++m_currentAckCount;
-			CS6Packet newPlayerResetPacket;
+			CS6Packet newPlayerLobbyPacket;
 			// Header
-			newPlayerResetPacket.packetType = TYPE_Reset;
-			newPlayerResetPacket.timestamp = cbutil::getCurrentTimeSeconds();
-			newPlayerResetPacket.playerColorAndID[0] = client->m_red;
-			newPlayerResetPacket.playerColorAndID[1] = client->m_green;
-			newPlayerResetPacket.playerColorAndID[2] = client->m_blue;
-			newPlayerResetPacket.packetNumber = m_currentAckCount;
+			newPlayerLobbyPacket.packetType = TYPE_JoinLobby;
+			newPlayerLobbyPacket.timestamp = cbutil::getCurrentTimeSeconds();
+			newPlayerLobbyPacket.playerColorAndID[0] = client->m_red;
+			newPlayerLobbyPacket.playerColorAndID[1] = client->m_green;
+			newPlayerLobbyPacket.playerColorAndID[2] = client->m_blue;
+			newPlayerLobbyPacket.packetNumber = m_currentAckCount;
 
 			// Data
-			newPlayerResetPacket.data.reset.flagXPosition = m_flag.m_xPos;
-			newPlayerResetPacket.data.reset.flagYPosition = m_flag.m_yPos;
-			newPlayerResetPacket.data.reset.playerXPosition = client->m_position.x;
-			newPlayerResetPacket.data.reset.playerYPosition = client->m_position.y;
-			newPlayerResetPacket.data.reset.playerColorAndID[0] = client->m_red;
-			newPlayerResetPacket.data.reset.playerColorAndID[1] = client->m_green;
-			newPlayerResetPacket.data.reset.playerColorAndID[2] = client->m_blue;
+			newPlayerLobbyPacket.data.joinLobby.playerColorAndID[0] = client->m_red;
+			newPlayerLobbyPacket.data.joinLobby.playerColorAndID[1] = client->m_green;
+			newPlayerLobbyPacket.data.joinLobby.playerColorAndID[2] = client->m_red;
 
-			client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,CS6Packet>( m_currentAckCount, newPlayerResetPacket ) );
+			client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,CS6Packet>( m_currentAckCount, newPlayerLobbyPacket ) );
+			
+			if ( m_lobby != nullptr ) {
+
+				m_lobby->addUserToLobby( client );
+			}
 
 			int winSockSendResult = 0;
-			winSockSendResult = sendto( m_listenSocket, (char*) &newPlayerResetPacket, sizeof( newPlayerResetPacket ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
+			winSockSendResult = sendto( m_listenSocket, (char*) &newPlayerLobbyPacket, sizeof( newPlayerLobbyPacket ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
 
 			if ( winSockSendResult == SOCKET_ERROR ) {
 
-				printf( "send function call failed with error number: %d\n", WSAGetLastError() );
+				printf( "send join lobby packet call failed with error number: %d\n", WSAGetLastError() );
 			}
 
 		} else {
@@ -273,56 +244,31 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 }
 
 
-void UDPServer::sendVictoryAndResetPacketToAllClients( const CS6Packet& victoryPacketFromWinner ) {
 
-	CS6Packet victoryPacketToSend;
-	victoryPacketToSend.packetType = TYPE_Victory;
-	
-	victoryPacketToSend.timestamp = cbutil::getCurrentTimeSeconds();
-	victoryPacketToSend.data.victorious.playerColorAndID[0] = victoryPacketFromWinner.data.victorious.playerColorAndID[0];
-	victoryPacketToSend.data.victorious.playerColorAndID[1] = victoryPacketFromWinner.data.victorious.playerColorAndID[1];
-	victoryPacketToSend.data.victorious.playerColorAndID[2] = victoryPacketFromWinner.data.victorious.playerColorAndID[2];
-	
 
-	std::map<std::string,ConnectedUDPClient*>::iterator itClient;
-	for ( itClient = m_clients.begin(); itClient != m_clients.end(); ++itClient ) {
+void UDPServer::sendPacket( CS6Packet& packetToSend, ConnectedUDPClient* client, bool bIsReliable ) {
 
-		ConnectedUDPClient* client = itClient->second;
-		victoryPacketToSend.playerColorAndID[0] = client->m_red;
-		victoryPacketToSend.playerColorAndID[1] = client->m_green;
-		victoryPacketToSend.playerColorAndID[2] = client->m_blue;
+	if ( client == nullptr ) {
 
-		++m_currentAckCount;
-		victoryPacketToSend.packetNumber = m_currentAckCount;
-
-		client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,CS6Packet>( victoryPacketToSend.packetNumber, victoryPacketToSend ) );
-
-		int winSockSendResult = 0;
-		winSockSendResult = sendto( m_listenSocket, (char*) &victoryPacketToSend, sizeof( CS6Packet ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
-
-		CS6Packet resetPacketToSend;
-		resetPacketToSend.packetType = TYPE_Reset;
-		resetPacketToSend.playerColorAndID[0] = client->m_red;
-		resetPacketToSend.playerColorAndID[1] = client->m_green;
-		resetPacketToSend.playerColorAndID[2] = client->m_blue;
-		resetPacketToSend.timestamp = cbutil::getCurrentTimeSeconds();
-		++m_currentAckCount;
-		resetPacketToSend.packetNumber = m_currentAckCount;
-
-		resetPacketToSend.data.reset.flagXPosition = m_flag.m_xPos;
-		resetPacketToSend.data.reset.flagYPosition = m_flag.m_yPos;
-		resetPacketToSend.data.reset.playerXPosition = client->m_position.x;
-		resetPacketToSend.data.reset.playerYPosition = client->m_position.y;
-		resetPacketToSend.data.reset.playerColorAndID[0] = client->m_red;
-		resetPacketToSend.data.reset.playerColorAndID[1] = client->m_green;
-		resetPacketToSend.data.reset.playerColorAndID[2] = client->m_blue;
-
-		client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,CS6Packet>( resetPacketToSend.packetNumber, resetPacketToSend ) );
-
-		winSockSendResult = sendto( m_listenSocket, (char*) &resetPacketToSend, sizeof( CS6Packet ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
+		return;
 	}
-	
-	
+
+	++m_currentAckCount;
+	packetToSend.packetNumber = m_currentAckCount;
+
+	int winSockSendResult = 0;
+	winSockSendResult = sendto( m_listenSocket, (char*) &packetToSend, sizeof( CS6Packet ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
+
+	if ( bIsReliable ) {
+
+		if ( packetToSend.packetType == TYPE_JoinLobby ) 
+		{
+
+			int x = 3;
+		}
+
+		client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,CS6Packet>( packetToSend.packetNumber, packetToSend ) );
+	}
 }
 
 
@@ -334,6 +280,11 @@ void UDPServer::checkForExpiredClients() {
 	for ( itClient = m_clients.begin(); itClient != m_clients.end(); ++itClient ) {
 
 		ConnectedUDPClient* client = itClient->second;
+
+		if ( client->m_isInLobby ) {
+			continue;
+		}
+
 		double lastTimePacketReceived = client->m_timeStampSecondsForLastPacketReceived;
 		double currentTimeSeconds = cbutil::getCurrentTimeSeconds();
 
@@ -342,6 +293,11 @@ void UDPServer::checkForExpiredClients() {
 		if ( secondsSinceLastPacketReceived > DURATION_THRESHOLD_FOR_DISCONECT ) {
 
 			clientsToRemove.push_back( itClient->first );
+
+			if ( !client->m_isInLobby && m_lobby != nullptr ) {
+
+				m_lobby->removeClientDueToInactivity( client );
+			} 
 		}
 	}
 
@@ -360,80 +316,6 @@ void UDPServer::checkForExpiredClients() {
 			printf( "\nRemoving client due to inactivity. Client IP and Port: %s \n", clientsToRemove[i].c_str() );
 		}
 	}
-}
-
-
-void UDPServer::sendPlayerDataToClients() {
-
-	static double lastTimeStampSeconds = cbutil::getCurrentTimeSeconds();
-
-	double currentTimeSeconds = cbutil::getCurrentTimeSeconds();
-	double timeDifSeconds = currentTimeSeconds - lastTimeStampSeconds;
-
-	m_durationSinceLastPacketUpdate += timeDifSeconds;
-
-	if ( m_durationSinceLastPacketUpdate > TIME_DIF_SECONDS_FOR_PACKET_UPDATE ) {
-
-		m_durationSinceLastPacketUpdate = 0.0;
-
-		std::vector<CS6Packet> playerPackets;
-		int winSockSendResult = 0;
-
-		std::map<std::string,ConnectedUDPClient*>::iterator itClient;
-		for ( itClient = m_clients.begin(); itClient != m_clients.end(); ++itClient ) {
-
-			ConnectedUDPClient* client = itClient->second;
-
-			++m_currentAckCount;
-
-			CS6Packet playerData;
-			playerData.packetType = TYPE_Update;
-			playerData.packetNumber = m_currentAckCount;
-			playerData.timestamp = cbutil::getCurrentTimeSeconds();
-			playerData.playerColorAndID[0] = client->m_red;
-			playerData.playerColorAndID[1] = client->m_green;
-			playerData.playerColorAndID[2] = client->m_blue;
-
-			playerData.data.updated.xPosition = client->m_position.x;
-			playerData.data.updated.yPosition = client->m_position.y;
-			playerData.data.updated.xVelocity = client->m_velocity.x;
-			playerData.data.updated.yVelocity = client->m_velocity.y;
-			playerData.data.updated.yawDegrees = client->m_orientationDegrees;
-
-			playerPackets.push_back( playerData );
-		}
-
-		std::map<std::string,ConnectedUDPClient*>::iterator itClientPacket;
-		for ( itClientPacket = m_clients.begin(); itClientPacket != m_clients.end(); ++itClientPacket ) {
-
-			ConnectedUDPClient* client = itClientPacket->second;
-
-			for ( int i = 0; i < static_cast<int>( playerPackets.size() ); ++i ) {
-
-				CS6Packet& packetToSend = playerPackets[i];
-
-				// For this assignment we are not doing guarenteed delivery for updates
-				//client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,PlayerDataPacket>( packetToSend.m_packetAckID, packetToSend ) );
-
-				//float randomNumberZeroToOne = cbengine::getRandomZeroToOne();
-				//if ( randomNumberZeroToOne < m_thresholdForPacketLossSimulation ) {
-					// Send 
-					winSockSendResult = sendto( m_listenSocket, (char*) &packetToSend, sizeof( packetToSend ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
-
-				//} else {
-					// Don't send but act like we did
-					// Leaving this block for testing purposes
-				//}
-
-				if ( winSockSendResult == SOCKET_ERROR ) {
-
-					printf( "send function for update type packets call failed with error number: %d\n", WSAGetLastError() );
-				}
-			}
-		}
-	}
-
-	lastTimeStampSeconds = currentTimeSeconds;
 }
 
 
@@ -485,7 +367,7 @@ void UDPServer::checkForExpiredReliablePacketsWithNoAcks() {
 		std::map<int,CS6Packet>::iterator itRel;
 		for ( itRel = client->m_reliablePacketsSentButNotAcked.begin(); itRel != client->m_reliablePacketsSentButNotAcked.end(); ++itRel ) {
 
-	int ackCountIDForPacket = itRel->first;
+			int ackCountIDForPacket = itRel->first;
 			CS6Packet& packet = itRel->second;
 			double timeStampForSendPacket = packet.timestamp;
 
@@ -495,6 +377,13 @@ void UDPServer::checkForExpiredReliablePacketsWithNoAcks() {
 
 				packet.timestamp = currentTimeSeconds;
 				int winSockSendResult = 0;
+
+				if ( packet.packetType == TYPE_JoinLobby ) 
+				{
+
+					int x = 3;
+				}
+
 				winSockSendResult = sendto( m_listenSocket, (char*) &packet, sizeof( packet ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
 			}
 		}

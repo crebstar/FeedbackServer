@@ -19,6 +19,8 @@
 
 #include "CS6Packet.hpp"
 
+const unsigned int	NOT_IN_GAME_ID = 0;
+
 class ConnectedUDPClient {
 public:
 	static int											s_numberOfClients;
@@ -38,6 +40,8 @@ public:
 	sockaddr_in											m_clientAddress;
 	std::string											m_userID;
 	int													m_playerID;
+	bool												m_isInLobby;
+	unsigned int										m_gameID;
 
 	std::map<int,CS6Packet>								m_reliablePacketsSentButNotAcked;
 

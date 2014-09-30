@@ -21,10 +21,15 @@
 
 //-----------------------------------------------------------------------------------------------
 typedef unsigned char PacketType;
-static const PacketType TYPE_Acknowledge = 10;
-static const PacketType TYPE_Victory = 11;
-static const PacketType TYPE_Update = 12;
-static const PacketType TYPE_Reset = 13;
+
+static const PacketType TYPE_Acknowledge		= 10;
+static const PacketType TYPE_Victory			= 11;
+static const PacketType TYPE_Update				= 12;
+static const PacketType TYPE_Reset				= 13;
+static const PacketType	TYPE_GameList			= 14;
+static const PacketType	TYPE_JoinGame			= 15;
+static const PacketType TYPE_CreateGame			= 16;
+static const PacketType	TYPE_JoinLobby			= 17;
 
 //-----------------------------------------------------------------------------------------------
 struct AckPacket
@@ -34,6 +39,42 @@ struct AckPacket
 };
 
 //-----------------------------------------------------------------------------------------------
+
+struct GameListPacket
+{
+
+	unsigned int totalNumGames;
+
+};
+
+//-----------------------------------------------------------------------------------------------
+
+struct JoinGamePacket
+{
+
+	unsigned int gameNumToJoin;
+
+};
+
+//-----------------------------------------------------------------------------------------------
+struct CreateGamePacket
+{
+
+	unsigned char playerColorAndID[ 3 ];
+
+};
+
+//-----------------------------------------------------------------------------------------------
+
+struct JoinLobbyPacket
+{
+
+	unsigned char playerColorAndID[ 3 ];
+};
+
+
+//-----------------------------------------------------------------------------------------------
+
 struct ResetPacket
 {
 	float flagXPosition;
@@ -72,13 +113,28 @@ struct CS6Packet
 	unsigned char playerColorAndID[ 3 ];
 	unsigned int packetNumber;
 	double timestamp;
+
 	union PacketData
 	{
-		AckPacket acknowledged;
-		ResetPacket reset;
-		UpdatePacket updated;
-		VictoryPacket victorious;
+		AckPacket				acknowledged;
+		ResetPacket				reset;
+		UpdatePacket			updated;
+		VictoryPacket			victorious;
+		GameListPacket			gameList;
+		JoinGamePacket			joinGame;
+		CreateGamePacket		createGame;
+		JoinLobbyPacket			joinLobby;
+
 	} data;
+
+	inline bool operator < ( const CS6Packet& rhs ) const {
+
+		if ( this->packetNumber < rhs.packetNumber ) {
+			return true;
+		}
+
+		return false;
+	}
 };
 
 #endif //INCLUDED_CS6_PACKET_HPP
