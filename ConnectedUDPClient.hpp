@@ -14,12 +14,14 @@
 
 
 #include "../../CBEngine/EngineCode/Vector2.hpp"
+#include "../../CBEngine/EngineCode/Vector3D.hpp"
+#include "../../CBEngine/EngineCode/EulerAngles.hpp"
 
 #include "UDPServer.hpp"
-
-#include "CS6Packet.hpp"
+#include "FinalPacket.hpp"
 
 const unsigned int	NOT_IN_GAME_ID = 0;
+const int STARTING_HEALTH = 1;
 
 class ConnectedUDPClient {
 public:
@@ -30,9 +32,11 @@ public:
 
 	double												m_timeStampSecondsForLastPacketReceived;
 
-	cbengine::Vector2									m_position;
-	cbengine::Vector2									m_velocity;
-	float												m_orientationDegrees;
+	cbengine::Vector3<float>							m_position;
+	cbengine::Vector3<float>							m_velocity;
+	cbengine::Vector3<float>							m_acceleration;
+	EulerAngles											m_orientationDegrees;
+
 	unsigned char										m_red;
 	unsigned char										m_green;
 	unsigned char										m_blue;
@@ -42,8 +46,11 @@ public:
 	int													m_playerID;
 	bool												m_isInLobby;
 	unsigned int										m_gameID;
+	unsigned int										m_clientID;
+	int													m_health;
+	int													m_score;
 
-	std::map<int,CS6Packet>								m_reliablePacketsSentButNotAcked;
+	std::map<int,FinalPacket>							m_reliablePacketsSentButNotAcked;
 
 protected:
 

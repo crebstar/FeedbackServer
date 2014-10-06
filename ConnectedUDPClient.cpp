@@ -13,9 +13,11 @@ ConnectedUDPClient::ConnectedUDPClient() {
 	m_timeStampSecondsForLastPacketReceived = 0.0;
 	++s_numberOfClients;
 	m_playerID = s_numberOfClients;
-	m_orientationDegrees = 0.0f;
 	m_isInLobby = false;
 	m_gameID = NOT_IN_GAME_ID;
+	m_clientID = 0;
+	m_health = STARTING_HEALTH;
+	m_score = 0;
 
 	assignColorForPlayer();
 }
@@ -79,6 +81,8 @@ void ConnectedUDPClient::assignColorForPlayer() {
 		m_green = 50;
 		m_blue = 140;
 	}
+
+	m_clientID = s_numberOfClients;
 }
 
 

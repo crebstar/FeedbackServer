@@ -7,9 +7,10 @@
 
 #include "../../CBEngine/EngineCode/EngineMacros.hpp"
 
-#include "CS6Packet.hpp"
+#include "FinalPacket.hpp"
 
 const double TIME_DIF_SECONDS_FOR_LOBBY_USER_UPDATE = 7.55;
+const size_t NUM_GAME_ROOMS = 8;
 
 class ConnectedUDPClient;
 class UDPServer;
@@ -22,11 +23,13 @@ public:
 	explicit GameLobby( UDPServer* server );
 
 	void updateLobby();
-	void OnClientPacketReceived( ConnectedUDPClient* client, const CS6Packet& clientPacket );
+	void OnClientPacketReceived( ConnectedUDPClient* client, const FinalPacket& clientPacket );
 
 	void addUserToLobby( ConnectedUDPClient* userToAdd );
 	void removeClientDueToInactivity( ConnectedUDPClient* clientToRemove );
 
+	void updateGameRooms();
+	GameRoom* getRoomByNumber( int gameRoomNum );
 
 	// Debug Related
 	void displayListOfLobbyUsers();
@@ -37,6 +40,7 @@ protected:
 	bool sendUserToGame( unsigned int gameID, ConnectedUDPClient* userToSend );
 	void sendListOfGamesToClients();
 
+	void createGameRooms();
 	void setGameLobbyDefaults();
 
 private:
@@ -45,7 +49,7 @@ private:
 	std::set<ConnectedUDPClient*>					m_lobbyUsers;
 	UDPServer*										m_server;
 
-	std::vector<GameRoom*>								m_gameRooms;
+	std::vector<GameRoom*>							m_gameRooms;
 };
 
 #endif

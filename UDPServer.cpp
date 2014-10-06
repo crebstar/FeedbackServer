@@ -14,8 +14,10 @@
 #include "GameLobby.hpp"
 #include "GameRoom.hpp"
 
+
 #include "../../CBEngine/EngineCode/TimeUtil.hpp"
 #include "../../CBEngine/EngineCode/MathUtil.hpp"
+
 
 UDPServer::~UDPServer() {
 
@@ -70,9 +72,11 @@ void UDPServer::initialize() {
 	hints.ai_socktype	= SOCK_DGRAM;
 	hints.ai_protocol	= IPPROTO_UDP;
 	hints.ai_flags		= AI_PASSIVE;
+	//hints.ai_addr		= INADDR_ANY;
+	
 
 
-	winSockResult = getaddrinfo( m_IPAddress.c_str(), m_PortNumber.c_str(), &hints, &result );
+	winSockResult = getaddrinfo( INADDR_ANY, m_PortNumber.c_str(), &hints, &result );
 	if ( winSockResult != 0 ) {
 
 		printf( "getaddrinfo function call failed with error number: %d\n", winSockResult );
@@ -127,11 +131,11 @@ void UDPServer::run() {
 		checkForExpiredClients();
 		displayConnectedUsers();
 
-		CS6Packet clientPacketReceived;
+		FinalPacket clientPacketReceived;
 
 		sockaddr_in clientSocketAddr;
 		int sizeOfResultAddress = sizeof( clientSocketAddr );
-		winSockResult = recvfrom( m_listenSocket, (char*) &clientPacketReceived, sizeof( CS6Packet ), 0, (sockaddr*) &clientSocketAddr, &sizeOfResultAddress );
+		winSockResult = recvfrom( m_listenSocket, (char*) &clientPacketReceived, sizeof( FinalPacket ), 0, (sockaddr*) &clientSocketAddr, &sizeOfResultAddress );
 
 		if ( winSockResult > 0 ) {
 
@@ -169,7 +173,7 @@ void UDPServer::convertIPAndPortToSingleString( char* ipAddress, int portNumber,
 }
 
 
-void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, const sockaddr_in& clientAddress, const CS6Packet& playerData ) {
+void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, const sockaddr_in& clientAddress, const FinalPacket& playerData ) {
 
 	std::map<std::string,ConnectedUDPClient*>::iterator itClient;
 
@@ -179,6 +183,7 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 
 		// ******************** Client Exists ******************** //
 		ConnectedUDPClient* client = itClient->second;
+		client->m_timeStampSecondsForLastPacketReceived = cbutil::getCurrentTimeSeconds();
 		
 		if ( m_lobby != nullptr ) {
 
@@ -189,7 +194,7 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 
 		// ******************** New Client ******************** //
 
-		if ( playerData.packetType == TYPE_Acknowledge ) {
+		if ( playerData.type == TYPE_JoinRoom ) {
 
 			float randomNumberZeroToOneForX = cbengine::getRandomZeroToOne();
 			float randomNumberZeroToOneForY = cbengine::getRandomZeroToOne();
@@ -201,27 +206,31 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 			client->m_timeStampSecondsForLastPacketReceived = currentTimeInSeconds;
 			client->m_position.x = randomNumberZeroToOneForX * ARENA_WIDTH; // For Now
 			client->m_position.y = randomNumberZeroToOneForY * ARENA_HEIGHT;
+			client->m_position.z = 0.0f;
+
 			m_clients.insert( std::pair<std::string,ConnectedUDPClient*>( combinedIPAndPort, client ) );
 
 			printf( "ACK packet received from a new client!" );
 			printf( "A new client has been created: %s \n", combinedIPAndPort.c_str() );
 
 			++m_currentAckCount;
-			CS6Packet newPlayerLobbyPacket;
+			FinalPacket newPlayerLobbyPacket;
 			// Header
-			newPlayerLobbyPacket.packetType = TYPE_JoinLobby;
+			newPlayerLobbyPacket.type = TYPE_Ack;
 			newPlayerLobbyPacket.timestamp = cbutil::getCurrentTimeSeconds();
-			newPlayerLobbyPacket.playerColorAndID[0] = client->m_red;
-			newPlayerLobbyPacket.playerColorAndID[1] = client->m_green;
-			newPlayerLobbyPacket.playerColorAndID[2] = client->m_blue;
-			newPlayerLobbyPacket.packetNumber = m_currentAckCount;
+			newPlayerLobbyPacket.clientID = client->m_clientID;
+			newPlayerLobbyPacket.number = m_currentAckCount;
 
 			// Data
-			newPlayerLobbyPacket.data.joinLobby.playerColorAndID[0] = client->m_red;
-			newPlayerLobbyPacket.data.joinLobby.playerColorAndID[1] = client->m_green;
-			newPlayerLobbyPacket.data.joinLobby.playerColorAndID[2] = client->m_red;
+			newPlayerLobbyPacket.data.acknowledged.number = playerData.number;
+			newPlayerLobbyPacket.data.acknowledged.type = TYPE_JoinRoom;
 
-			client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,CS6Packet>( m_currentAckCount, newPlayerLobbyPacket ) );
+			bool bPacketGuarenteed = newPlayerLobbyPacket.IsGuaranteed();
+			if ( bPacketGuarenteed ) {
+
+				client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,FinalPacket>( m_currentAckCount, newPlayerLobbyPacket ) );
+			}
+			
 			
 			if ( m_lobby != nullptr ) {
 
@@ -246,7 +255,7 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 
 
 
-void UDPServer::sendPacket( CS6Packet& packetToSend, ConnectedUDPClient* client, bool bIsReliable ) {
+void UDPServer::sendPacket( FinalPacket& packetToSend, ConnectedUDPClient* client, bool bIsReliable ) {
 
 	if ( client == nullptr ) {
 
@@ -254,20 +263,14 @@ void UDPServer::sendPacket( CS6Packet& packetToSend, ConnectedUDPClient* client,
 	}
 
 	++m_currentAckCount;
-	packetToSend.packetNumber = m_currentAckCount;
+	packetToSend.number = m_currentAckCount;
 
 	int winSockSendResult = 0;
-	winSockSendResult = sendto( m_listenSocket, (char*) &packetToSend, sizeof( CS6Packet ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
+	winSockSendResult = sendto( m_listenSocket, (char*) &packetToSend, sizeof( FinalPacket ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
 
 	if ( bIsReliable ) {
 
-		if ( packetToSend.packetType == TYPE_JoinLobby ) 
-		{
-
-			int x = 3;
-		}
-
-		client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,CS6Packet>( packetToSend.packetNumber, packetToSend ) );
+		client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,FinalPacket>( packetToSend.number, packetToSend ) );
 	}
 }
 
@@ -364,11 +367,11 @@ void UDPServer::checkForExpiredReliablePacketsWithNoAcks() {
 
 		ConnectedUDPClient* client = itClient->second;
 
-		std::map<int,CS6Packet>::iterator itRel;
+		std::map<int,FinalPacket>::iterator itRel;
 		for ( itRel = client->m_reliablePacketsSentButNotAcked.begin(); itRel != client->m_reliablePacketsSentButNotAcked.end(); ++itRel ) {
 
 			int ackCountIDForPacket = itRel->first;
-			CS6Packet& packet = itRel->second;
+			FinalPacket& packet = itRel->second;
 			double timeStampForSendPacket = packet.timestamp;
 
 			double timeDifSeconds = currentTimeSeconds - timeStampForSendPacket;
@@ -377,12 +380,6 @@ void UDPServer::checkForExpiredReliablePacketsWithNoAcks() {
 
 				packet.timestamp = currentTimeSeconds;
 				int winSockSendResult = 0;
-
-				if ( packet.packetType == TYPE_JoinLobby ) 
-				{
-
-					int x = 3;
-				}
 
 				winSockSendResult = sendto( m_listenSocket, (char*) &packet, sizeof( packet ), 0, (sockaddr*) &client->m_clientAddress, sizeof( client->m_clientAddress ) );
 			}

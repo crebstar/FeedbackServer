@@ -14,7 +14,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include "CS6Packet.hpp"
+#include "FinalPacket.hpp"
 #include "CTFlag.hpp"
 
 
@@ -75,9 +75,7 @@ public:
 	void initialize();
 	void run();
 
-	void sendPacket( CS6Packet& packetToSend, ConnectedUDPClient* client, bool bIsReliable );
-
-
+	void sendPacket( FinalPacket& packetToSend, ConnectedUDPClient* client, bool bIsReliable );
 
 protected:
 
@@ -104,7 +102,7 @@ protected:
 private:
 
 	void convertIPAndPortToSingleString( char* ipAddress, int portNumber, std::string& out_combinedIPAndPort );
-	void updateOrCreateNewClient( const std::string& combinedIPAndPort, const sockaddr_in& clientAddress, const CS6Packet& playerData );
+	void updateOrCreateNewClient( const std::string& combinedIPAndPort, const sockaddr_in& clientAddress, const FinalPacket& playerData );
 	void checkForExpiredClients();
 	void displayConnectedUsers();
 	

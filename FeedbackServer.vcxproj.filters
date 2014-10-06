@@ -45,5 +45,8 @@
     <ClInclude Include="GameRoom.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="FinalPacket.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

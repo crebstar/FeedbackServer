@@ -85,6 +85,7 @@
     <ClInclude Include="ConnectedUDPClient.hpp" />
     <ClInclude Include="CS6Packet.hpp" />
     <ClInclude Include="CTFlag.hpp" />
+    <ClInclude Include="FinalPacket.hpp" />
     <ClInclude Include="GameLobby.hpp" />
     <ClInclude Include="GameRoom.hpp" />
     <ClInclude Include="UDPServer.hpp" />

@@ -16,6 +16,18 @@ GameLobby::GameLobby( UDPServer* server ) {
 
 	setGameLobbyDefaults();
 	m_server = server;
+
+	createGameRooms();
+}
+
+
+void GameLobby::createGameRooms() {
+
+	for ( size_t i = 1; i <= NUM_GAME_ROOMS; ++i ) {
+
+		GameRoom* room = new GameRoom( i, nullptr, m_server, this );
+		m_gameRooms.push_back( room );
+	}
 }
 
 
@@ -24,6 +36,12 @@ void GameLobby::updateLobby() {
 	displayListOfLobbyUsers();
 
 	sendListOfGamesToClients();
+
+	updateGameRooms();
+}
+
+
+void GameLobby::updateGameRooms() {
 
 	for ( size_t i = 0; i < m_gameRooms.size(); ++i ) {
 
@@ -48,43 +66,59 @@ void GameLobby::sendListOfGamesToClients() {
 
 	durationSinceLastPacketUpdate += timeDifSeconds;
 
+	
 	if ( durationSinceLastPacketUpdate > TIME_DIF_SECONDS_FOR_PACKET_UPDATE ) {
 
-		CS6Packet packetToSend;
+
+		FinalPacket packetToSend;
 
 		// Header
-		packetToSend.packetType = TYPE_GameList;
+		packetToSend.type = TYPE_LobbyUpdate;
+		packetToSend.number = 0; // Populated from server
 		packetToSend.timestamp = cbutil::getCurrentTimeSeconds();
-		packetToSend.packetNumber = 0; // This is populated from the server
+		
+
+		if ( m_gameRooms.size() < NUM_GAME_ROOMS ) {
+			printf( "Warning-> Number of game rooms does not match required the game room number" );
+
+			for ( size_t i = 0; i < NUM_GAME_ROOMS; ++i ) {
+
+				packetToSend.data.updatedLobby.playersInRoomNumber[i] = 0;
+			}
+		}
+
 
 		// Data
-		packetToSend.data.gameList.totalNumGames = m_gameRooms.size();
+		for ( size_t i = 0; i < m_gameRooms.size(); ++i ) {
 
+			GameRoom* room = m_gameRooms[i];
+			if ( room != nullptr ) {
+
+				packetToSend.data.updatedLobby.playersInRoomNumber[i] = room->getNumPlayersInRoom();
+			} 
+		}
+
+		bool bPacketGuarenteed = packetToSend.IsGuaranteed();
+		ConnectedUDPClient* client = nullptr;
 		std::set<ConnectedUDPClient*>::iterator itClient;
 
-		ConnectedUDPClient* client = nullptr;
 		for ( itClient = m_lobbyUsers.begin(); itClient != m_lobbyUsers.end(); ++itClient ) {
 
 			client = *(itClient);
 			if ( client != nullptr ) {
 
-				// Don't time out clients who are in the lobby
-				client->m_timeStampSecondsForLastPacketReceived = cbutil::getCurrentTimeSeconds(); 
-
-				packetToSend.playerColorAndID[0] = client->m_red;
-				packetToSend.playerColorAndID[1] = client->m_green;
-				packetToSend.playerColorAndID[2] = client->m_blue;
-
-				m_server->sendPacket( packetToSend, client, false );
+				packetToSend.clientID = client->m_clientID;
+				m_server->sendPacket( packetToSend, client, bPacketGuarenteed );
 			}
 		}
 	}
+	
 
 	lastTimeStampSeconds = cbutil::getCurrentTimeSeconds();
 }
 
 
-void GameLobby::OnClientPacketReceived( ConnectedUDPClient* client, const CS6Packet& clientPacket ) {
+void GameLobby::OnClientPacketReceived( ConnectedUDPClient* client, const FinalPacket& clientPacket ) {
 
 	ConnectedUDPClient* lobbyClient = nullptr;
 
@@ -120,51 +154,162 @@ void GameLobby::OnClientPacketReceived( ConnectedUDPClient* client, const CS6Pac
 
 		lobbyClient = *(itLob);
 
-		if ( clientPacket.packetType == TYPE_JoinGame ) {
+		if ( clientPacket.type == TYPE_JoinRoom ) {
 
-			printf( "JoinGame packet received from User %s \n", lobbyClient->m_userID.c_str() );
-			if ( clientPacket.data.joinGame.gameNumToJoin > m_gameRooms.size() ) {
+			//	Client->Server: JoinRoom( # )
+			//		If room # is empty:
+			//			Server->Client: Nack( ERROR_RoomEmpty )
+			//			GOTO LOBBY LOOP
+			//		If room # is full:
+			//			Server->Client: Ack
+			//			Server->Client: GameReset (implicit respawn)
+			//			GOTO GAME LOOP
+
+			int roomNumToJoin = clientPacket.data.joining.room;
+			GameRoom* roomToJoin = getRoomByNumber( roomNumToJoin );
+
+			if ( roomToJoin != nullptr ) {
+
+				bool roomIsEmpty = roomToJoin->isRoomEmpty();
+				if ( !roomIsEmpty ) {
+					// Room can be joined and has an owner
+
+					FinalPacket joinAckPacket;
+
+					// Header
+					joinAckPacket.type = TYPE_Ack;
+					joinAckPacket.timestamp = cbutil::getCurrentTimeSeconds();
+					joinAckPacket.clientID = client->m_clientID;
+
+					// Data
+					joinAckPacket.data.acknowledged.number = clientPacket.number;
+					joinAckPacket.data.acknowledged.type = TYPE_JoinRoom;
+
+					m_server->sendPacket( joinAckPacket, client, false ); 
+
+					printf( "JoinGame packet received from User %s \n", lobbyClient->m_userID.c_str() );
+
+					roomToJoin->addPlayer( client, false );
+					m_lobbyUsers.erase( client );
+
+				} else {
+					// Room is not created :: Send Nack
+					FinalPacket joinNackPacket;
+
+					// Header
+					joinNackPacket.type = TYPE_Nack;
+					joinNackPacket.timestamp = cbutil::getCurrentTimeSeconds();
+					joinNackPacket.clientID = client->m_clientID;
+
+					// Data
+					joinNackPacket.data.refused.errorCode = ERROR_RoomEmpty;
+					joinNackPacket.data.refused.type = TYPE_JoinRoom;
+					joinNackPacket.data.refused.number = clientPacket.number;
+
+					m_server->sendPacket( joinNackPacket, client, false );
+
+					printf( "Warning-> Client %s is attempting to join a game that has not been created\n", lobbyClient->m_userID.c_str() );
+
+				}
+
+			} else {
+				// Bad room ID
+				FinalPacket joinNackPacket;
+
+				// Header
+				joinNackPacket.type = TYPE_Nack;
+				joinNackPacket.timestamp = cbutil::getCurrentTimeSeconds();
+				joinNackPacket.clientID = client->m_clientID;
+
+				// Data
+				joinNackPacket.data.refused.errorCode = ERROR_RoomEmpty;
+				joinNackPacket.data.refused.type = TYPE_JoinRoom;
+				joinNackPacket.data.refused.number = clientPacket.number;
+
+				m_server->sendPacket( joinNackPacket, client, false );
 
 				printf( "Warning-> Client %s is attempting to join a game that does NOT exist\n", lobbyClient->m_userID.c_str() );
-				return;
 			}
+		
+		} else if ( clientPacket.type == TYPE_CreateRoom ) {
 
-			for ( size_t i = 0; i < m_gameRooms.size(); ++i ) {
+			//	Client->Server: CreateRoom( # )
+			//		If room # is empty:
+			//			Server->Client: Ack
+			//			Server->Client: GameReset (implicit respawn)
+			//			GOTO GAME LOOP
+			//		If room # is full:
+			//			Server->Client: Nack( ERROR_RoomFull )
+			//			GOTO LOBBY LOOP
 
-				GameRoom* room = m_gameRooms[i];
-				if ( room->m_gameRoomNum == clientPacket.data.joinGame.gameNumToJoin ) {
+			int roomNumToCreate = clientPacket.data.creating.room;
+			GameRoom* roomToCreate = getRoomByNumber( roomNumToCreate );
+			bool roomCanBeCreated = false;
 
-					room->addPlayer( client );
-					
+			if ( roomToCreate != nullptr ) {
+
+				roomCanBeCreated = roomToCreate->isRoomEmpty();
+				if ( roomCanBeCreated ) {
+					// Room is empty and can be claimed/created
+
+					roomToCreate->addPlayer( client, true );
 					m_lobbyUsers.erase( client );
+
+					FinalPacket createAckPacket;
+					createAckPacket.type = TYPE_Ack;
+					createAckPacket.timestamp = cbutil::getCurrentTimeSeconds();
+					createAckPacket.clientID = client->m_clientID;
+					createAckPacket.data.acknowledged.type = TYPE_CreateRoom;
+					createAckPacket.data.acknowledged.number = clientPacket.number;
+
+					m_server->sendPacket( createAckPacket, client, false );
+
+				} else {
+					// Room is not available for creation 
+
+					FinalPacket createNackPacket;
+					createNackPacket.type = TYPE_Nack;
+					createNackPacket.timestamp = cbutil::getCurrentTimeSeconds();
+					createNackPacket.clientID = client->m_clientID;
+					createNackPacket.data.refused.errorCode = ERROR_RoomFull;
+					createNackPacket.data.refused.number = clientPacket.number;
+					createNackPacket.data.refused.type = TYPE_CreateRoom;
+
+					m_server->sendPacket( createNackPacket, client, false );
 				}
+
+			} else {
+				// Room not found
+
+				FinalPacket createNackPacket;
+				createNackPacket.type = TYPE_Nack;
+				createNackPacket.timestamp = cbutil::getCurrentTimeSeconds();
+				createNackPacket.clientID = client->m_clientID;
+				createNackPacket.data.refused.errorCode = ERROR_BadRoomID;
+				createNackPacket.data.refused.number = clientPacket.number;
+				createNackPacket.data.refused.type = TYPE_CreateRoom;
+
+				m_server->sendPacket( createNackPacket, client, false );
 			}
 
-		} else if ( clientPacket.packetType == TYPE_CreateGame ) {
-
-			printf( "CreateGame packet received from User %s \n", lobbyClient->m_userID.c_str() );
-			size_t currentNumGames = m_gameRooms.size();
-			++currentNumGames;
-
-			GameRoom* gameRoomToAdd = new GameRoom( currentNumGames, client, m_server, this );
-			m_gameRooms.push_back( gameRoomToAdd );
-
-			m_lobbyUsers.erase( client );
-
-		} else if ( clientPacket.packetType == TYPE_Acknowledge ) {
+		} else if ( clientPacket.type == TYPE_Ack ) {
 
 			double currentTimeInSeconds = cbutil::getCurrentTimeSeconds();
-			int ackCountID = clientPacket.data.acknowledged.packetNumber;
+			int ackCountID = clientPacket.data.acknowledged.number;
 
 			client->m_timeStampSecondsForLastPacketReceived = currentTimeInSeconds;
 
-			std::map<int,CS6Packet>::iterator itAck;
+			std::map<int,FinalPacket>::iterator itAck;
 			itAck = client->m_reliablePacketsSentButNotAcked.find( ackCountID );
 			if ( itAck != client->m_reliablePacketsSentButNotAcked.end() ) {
 
 				client->m_reliablePacketsSentButNotAcked.erase( itAck );
 
 			}
+
+		} else if ( clientPacket.type == TYPE_KeepAlive ) {
+
+			client->m_timeStampSecondsForLastPacketReceived = cbutil::getCurrentTimeSeconds();
 
 		} else {
 
@@ -227,18 +372,10 @@ void GameLobby::removeClientDueToInactivity( ConnectedUDPClient* clientToRemove 
 
 					wasOwner = true;
 					room->endGameRoom();
-					roomToRemove = i;
 
-					delete room;
-					room = nullptr;
-					break;
+					printf( "User %s being removed was the game room owner of room %d.", clientToRemove->m_userID.c_str(), clientToRemove->m_gameID );
 				}
 			}
-		}
-
-		if ( wasOwner ) {
-
-			m_gameRooms.erase( m_gameRooms.begin() + roomToRemove );
 		}
 	}
 
@@ -283,6 +420,25 @@ bool GameLobby::sendUserToGame( unsigned int gameID, ConnectedUDPClient* userToS
 
 
 	return bUserCouldJoinGame;
+}
+
+
+GameRoom* GameLobby::getRoomByNumber( int gameRoomNum ) {
+
+	GameRoom* roomToReturn = nullptr;
+
+	for ( size_t i = 0; i < m_gameRooms.size(); ++i ) {
+
+		GameRoom* room = m_gameRooms[i];
+		if ( room != nullptr ) {
+			if ( room->m_gameRoomNum == gameRoomNum ) {
+
+				roomToReturn = room;
+			}
+		}
+	}
+
+	return roomToReturn;
 }
 
 

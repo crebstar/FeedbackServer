@@ -6,7 +6,9 @@
 
 #include "../../CBEngine/EngineCode/EngineMacros.hpp"
 
-#include "CS6Packet.hpp"
+#include "FinalPacket.hpp"
+
+const int WINNING_SCORE_NUM = 10;
 
 class ConnectedUDPClient;
 class UDPServer;
@@ -19,11 +21,16 @@ public:
 	explicit GameRoom( unsigned int gameRoomNum, ConnectedUDPClient* owner, UDPServer* server, GameLobby* lobby );
 
 	void updateGameRoom();
-	void addPlayer( ConnectedUDPClient* playerToAdd );
+	void checkForWinCondition();
 
-	void OnClientPacketReceived( ConnectedUDPClient* client, const CS6Packet& playerData );
+	void addPlayer( ConnectedUDPClient* playerToAdd, bool isOwner = false );
+
+	void OnClientPacketReceived( ConnectedUDPClient* client, const FinalPacket& playerData );
 
 	void endGameRoom();
+
+	int getNumPlayersInRoom() const;
+	bool isRoomEmpty() const;
 
 	unsigned int 						m_gameRoomNum;
 	ConnectedUDPClient*					m_owner;
@@ -31,7 +38,10 @@ public:
 protected:
 
 	void sendUpdatePacketsToPlayers();
-	void sendVictoryAndResetPacketToAllClients( const CS6Packet& victoryPacketFromWinner );
+	void sendVictoryAndResetPacketToAllClients( const FinalPacket& victoryPacketFromWinner );
+
+	void validateFireAndSendHitPackets( ConnectedUDPClient* firingClient, const FinalPacket& firePacket );
+	void resetPlayer( ConnectedUDPClient* playerToReset );
 
 	void setGameRoomDefaults();
 
@@ -46,6 +56,18 @@ private:
 	double								durationSinceLastPacketUpdate;
 	double								lastTimeStampSeconds;
 };
+
+
+inline int GameRoom::getNumPlayersInRoom() const {
+
+	return m_players.size();
+}
+
+
+inline bool GameRoom::isRoomEmpty() const {
+
+	return m_players.empty();
+}
 
 /*
 // FROM UPDATE IN UDPSERVER
