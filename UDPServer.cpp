@@ -63,7 +63,7 @@ void UDPServer::initialize() {
 	winSockResult = WSAStartup( MAKEWORD( 2, 2 ), &wsaData );
 	if ( winSockResult != 0 ) {
 
-		printf( "WSAStartup failed with error number: %d\n", winSockResult );
+		printf( "\nWSAStartup failed with error number: %d\n", winSockResult );
 		return;
 	}
 
@@ -128,7 +128,6 @@ void UDPServer::run() {
 
 	while ( m_serverShouldRun ) {
 
-		checkForExpiredClients();
 		displayConnectedUsers();
 
 		FinalPacket clientPacketReceived;
@@ -153,6 +152,7 @@ void UDPServer::run() {
 		}
 
 		checkForExpiredReliablePacketsWithNoAcks();
+		checkForExpiredClients();
 	} 
 
 	WSACleanup();
@@ -210,8 +210,8 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 
 			m_clients.insert( std::pair<std::string,ConnectedUDPClient*>( combinedIPAndPort, client ) );
 
-			printf( "ACK packet received from a new client!" );
-			printf( "A new client has been created: %s \n", combinedIPAndPort.c_str() );
+			//printf( "\nACK packet received from a new client!\n" );
+			printf( "\n\n -*-* A new client has joined the server: %s -*-* \n\n", combinedIPAndPort.c_str() );
 
 			++m_currentAckCount;
 			FinalPacket newPlayerLobbyPacket;
@@ -225,12 +225,13 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 			newPlayerLobbyPacket.data.acknowledged.number = playerData.number;
 			newPlayerLobbyPacket.data.acknowledged.type = TYPE_JoinRoom;
 
+			/*
 			bool bPacketGuarenteed = newPlayerLobbyPacket.IsGuaranteed();
 			if ( bPacketGuarenteed ) {
 
 				client->m_reliablePacketsSentButNotAcked.insert( std::pair<int,FinalPacket>( m_currentAckCount, newPlayerLobbyPacket ) );
 			}
-			
+			*/
 			
 			if ( m_lobby != nullptr ) {
 
@@ -242,12 +243,12 @@ void UDPServer::updateOrCreateNewClient( const std::string& combinedIPAndPort, c
 
 			if ( winSockSendResult == SOCKET_ERROR ) {
 
-				printf( "send join lobby packet call failed with error number: %d\n", WSAGetLastError() );
+				printf( "\nsend join lobby packet call failed with error number: %d\n", WSAGetLastError() );
 			}
 
 		} else {
 
-			printf( "WARNING-> Packet received from unrecognized client which is not an ACK for joining server" );
+			printf( "\nWARNING-> Packet received from unrecognized client which is not an ACK for joining server\n" );
 		}
 	}
 }
@@ -284,10 +285,6 @@ void UDPServer::checkForExpiredClients() {
 
 		ConnectedUDPClient* client = itClient->second;
 
-		if ( client->m_isInLobby ) {
-			continue;
-		}
-
 		double lastTimePacketReceived = client->m_timeStampSecondsForLastPacketReceived;
 		double currentTimeSeconds = cbutil::getCurrentTimeSeconds();
 
@@ -297,7 +294,7 @@ void UDPServer::checkForExpiredClients() {
 
 			clientsToRemove.push_back( itClient->first );
 
-			if ( !client->m_isInLobby && m_lobby != nullptr ) {
+			if ( m_lobby != nullptr ) {
 
 				m_lobby->removeClientDueToInactivity( client );
 			} 
@@ -312,9 +309,9 @@ void UDPServer::checkForExpiredClients() {
 		if ( itClientRem != m_clients.end() ) {
 
 			ConnectedUDPClient* client = itClientRem->second;
-			delete client;
-
 			m_clients.erase( itClientRem );
+
+			//delete client;
 
 			printf( "\nRemoving client due to inactivity. Client IP and Port: %s \n", clientsToRemove[i].c_str() );
 		}
@@ -337,11 +334,11 @@ void UDPServer::displayConnectedUsers() {
 
 		if ( m_clients.empty() ) {
 
-			printf( "---- There are currently no clients connected ----\n\n" );
+			printf( "\n---- There are currently no clients connected ----\n\n" );
 
 		} else {
 
-			printf( "---- Displaying List Of Connected Clients ----\n\n");
+			printf( "\n---- Displaying List Of Connected Clients ----\n\n");
 
 			std::map<std::string,ConnectedUDPClient*>::iterator itClient;
 			for ( itClient = m_clients.begin(); itClient != m_clients.end(); ++itClient ) {
@@ -350,7 +347,7 @@ void UDPServer::displayConnectedUsers() {
 				printf( "Client with user ID: %s is connected to the server.\n", client->m_userID.c_str() );
 			}
 
-			printf( "---- End List Of Connected Clients ----\n\n");
+			printf( "\n\n------ End List Of Connected Clients ------\n\n");
 		}
 	}
 

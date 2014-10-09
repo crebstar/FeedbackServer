@@ -41,10 +41,14 @@ void GameRoom::updateGameRoom() {
 	sendUpdatePacketsToPlayers();
 
 	checkForWinCondition();
+
+	displayConnectedUsers();
 }
 
 
 void GameRoom::checkForWinCondition() {
+
+	bool winConditionMet = false;
 
 	std::set<ConnectedUDPClient*>::iterator itPlayer;
 	for ( itPlayer = m_players.begin(); itPlayer != m_players.end(); ++itPlayer ) {
@@ -53,10 +57,15 @@ void GameRoom::checkForWinCondition() {
 		
 		if ( client->m_score >= WINNING_SCORE_NUM ) {
 
+			winConditionMet = true;
 			printf( "User %s has achieved victory in GameRoom: %d ", client->m_userID.c_str(), m_gameRoomNum );
-
-			endGameRoom();
 		}
+	}
+
+	if ( winConditionMet ) {
+
+		printf( "\n\nGameRoom# %d is finishing as the win condition is met!\n\n", m_gameRoomNum );
+		endGameRoom();
 	}
 }
 
@@ -88,11 +97,25 @@ void GameRoom::OnClientPacketReceived( ConnectedUDPClient* client, const FinalPa
 
 		} else {
 
-			printf( "WARNING-> Could not find packet with corresponding AckCountID" );
+			printf( "WARNING-> Could not find packet with corresponding AckCountID \n" );
 		}
 
 	} else if ( playerData.type == TYPE_Fire ) {
 
+		FinalPacket fireAck;
+
+		// Header
+		fireAck.type = TYPE_Ack;
+		fireAck.timestamp = cbutil::getCurrentTimeSeconds();
+		fireAck.clientID = playerData.clientID;
+
+		// Data
+		fireAck.data.acknowledged.number = playerData.number;
+		fireAck.data.acknowledged.type = TYPE_Fire;
+
+		m_server->sendPacket( fireAck, client, false );
+
+		sendFirePacketToAllPlayers( playerData );
 		validateFireAndSendHitPackets( client, playerData );
 
 	} else if ( playerData.type == TYPE_GameUpdate) {
@@ -109,18 +132,110 @@ void GameRoom::OnClientPacketReceived( ConnectedUDPClient* client, const FinalPa
 		
 		// Note: Not taking score or health as these are decided by the server
 
-	} else  {
+	} else if ( playerData.type == TYPE_JoinRoom ) {
 
-		printf( "WARNING-> Received a packet of type %d that is not accepted by GameRoom. This is NOT allowed!\n", playerData.type );
-		printf( "Packet received from client: %s\n", client->m_userID.c_str() );
+		if ( playerData.data.joining.room == this->m_gameRoomNum ) {
+
+			FinalPacket joinAckPacket;
+
+			// Header
+			joinAckPacket.type = TYPE_Ack;
+			joinAckPacket.timestamp = cbutil::getCurrentTimeSeconds();
+			joinAckPacket.clientID = client->m_clientID;
+
+			// Data
+			joinAckPacket.data.acknowledged.number = playerData.number;
+			joinAckPacket.data.acknowledged.type = TYPE_JoinRoom;
+
+			m_server->sendPacket( joinAckPacket, client, false ); 
+
+		} else {
+
+			// Send Nack
+			FinalPacket joinNackPacket;
+
+			// Header
+			joinNackPacket.type = TYPE_Nack;
+			joinNackPacket.timestamp = cbutil::getCurrentTimeSeconds();
+			joinNackPacket.clientID = client->m_clientID;
+
+			// Data
+			joinNackPacket.data.refused.errorCode = ERROR_Unknown;
+			joinNackPacket.data.refused.type = TYPE_JoinRoom;
+			joinNackPacket.data.refused.number = playerData.number;
+
+			m_server->sendPacket( joinNackPacket, client, false );
+
+			printf( "WARNING-> Player is sending a join packet in the game room which has a different number than current game room \n" );
+		}
+
+	} else if ( playerData.type == TYPE_CreateRoom ) {
+
+		if ( playerData.data.creating.room == this->m_gameRoomNum ) {
+
+			FinalPacket createAckPacket;
+
+			createAckPacket.type = TYPE_Ack;
+			createAckPacket.timestamp = cbutil::getCurrentTimeSeconds();
+			createAckPacket.clientID = client->m_clientID;
+			createAckPacket.data.acknowledged.type = TYPE_CreateRoom;
+			createAckPacket.data.acknowledged.number =playerData.number;
+
+			m_server->sendPacket( createAckPacket, client, false );
+
+		} else {
+
+			FinalPacket createNackPacket;
+
+			createNackPacket.type = TYPE_Nack;
+			createNackPacket.timestamp = cbutil::getCurrentTimeSeconds();
+			createNackPacket.clientID = client->m_clientID;
+			createNackPacket.data.refused.errorCode = ERROR_Unknown;
+			createNackPacket.data.refused.number = playerData.number;
+			createNackPacket.data.refused.type = TYPE_CreateRoom;
+
+			m_server->sendPacket( createNackPacket, client, false );
+
+			printf( "WARNING-> Player is sending create pack in a game room which has a different number than the current game room \n" );
+		}
+
+	} else {
+
+		if ( playerData.type != TYPE_KeepAlive ) {
+
+			printf( "WARNING-> Received a packet of type :: %d ::  that is not accepted by GameRoom. This is NOT allowed!\n", playerData.type );
+			printf( "Packet received from client: %s\n", client->m_userID.c_str() );
+		}
 	}
-	
+}
+
+
+void GameRoom::sendFirePacketToAllPlayers( const FinalPacket& firePacket ) {
+
+	std::set<ConnectedUDPClient*>::iterator itClient;
+	for ( itClient = m_players.begin(); itClient != m_players.end(); ++itClient ) {
+
+		// Client
+		ConnectedUDPClient* client = *(itClient);
+
+		FinalPacket fireRelay;
+		
+		// Header
+		fireRelay.type = TYPE_Fire;
+		fireRelay.timestamp = cbutil::getCurrentTimeSeconds();
+		fireRelay.clientID = client->m_clientID;
+
+		// Data
+		fireRelay.data.gunfire.instigatorID = firePacket.data.gunfire.instigatorID;
+
+		m_server->sendPacket( fireRelay, client, fireRelay.IsGuaranteed() );
+	}
 }
 
 
 void GameRoom::validateFireAndSendHitPackets( ConnectedUDPClient* firingClient, const FinalPacket& firePacket ) {
 
-	const size_t numTimesToSample = 1000;
+	const size_t numTimesToSample = 800;
 	const float incrementMagnitude = 0.70f;
 	const float tankRadius = 10.0f;
 
@@ -139,7 +254,6 @@ void GameRoom::validateFireAndSendHitPackets( ConnectedUDPClient* firingClient, 
 	incrementVector.x = cos( cbengine::degreesToRadians( firingAngle ) );
 	incrementVector.y = sin ( cbengine::degreesToRadians( firingAngle ) );
 	
-	bool wasHit = false;
 	std::vector<int> hitIDs;
 
 	for ( size_t i = 0; i < numTimesToSample; ++i ) {
@@ -165,14 +279,27 @@ void GameRoom::validateFireAndSendHitPackets( ConnectedUDPClient* firingClient, 
 			tankDisk.origin.x = player->m_position.x;
 			tankDisk.origin.y = player->m_position.y;
 			
+			bool wasHit = false;
 			wasHit = cbengine::doesDiskIntersectDiskOrTouch( lazerDisk, tankDisk );
 			if ( wasHit ) {
 
-				// PR: Assuming health is one for now
-				firingClient->m_score += 1;
-				hitIDs.push_back( player->m_clientID );
+				bool alreadyInHitList = false;
+				for ( int y = 0; y < hitIDs.size(); ++y ) {
 
-				resetPlayer( player );
+					if ( player->m_clientID == hitIDs[y] ) {
+						alreadyInHitList = true;
+						break;
+					}
+				}
+
+				if ( !alreadyInHitList ) {
+
+					// PR: Assuming health is one for now
+					firingClient->m_score += 1;
+					hitIDs.push_back( player->m_clientID );
+
+					resetPlayer( player );
+				}
 			}
 		}
 	}
@@ -224,6 +351,15 @@ void GameRoom::resetPlayer( ConnectedUDPClient* playerToReset ) {
 	randomNumZeroToOne = cbengine::getRandomZeroToOne();
 
 	respawnPacket.data.respawn.yPosition = ARENA_HEIGHT * randomNumZeroToOne;
+
+	playerToReset->m_position.x = respawnPacket.data.respawn.xPosition;
+	playerToReset->m_position.y = respawnPacket.data.respawn.yPosition;
+
+	playerToReset->m_velocity.x = 0.0f;
+	playerToReset->m_velocity.y = 0.0f;
+
+	playerToReset->m_acceleration.x = 0.0f;
+	playerToReset->m_acceleration.y = 0.0f;
 	
 	m_server->sendPacket( respawnPacket, playerToReset, respawnPacket.IsGuaranteed() );
 }
@@ -380,54 +516,43 @@ void GameRoom::endGameRoom() {
 }
 
 
-void GameRoom::sendVictoryAndResetPacketToAllClients( const FinalPacket& victoryPacketFromWinner ) {
+void GameRoom::displayConnectedUsers() {
 
-	if ( m_server == nullptr ) {
+	double currentTimeSeconds = cbutil::getCurrentTimeSeconds();
+	double timeDifSeconds = currentTimeSeconds - lastTimeStampForDisplay;
+
+	durationSinceLastDisplay += timeDifSeconds;
+
+	if ( m_players.empty() ) {
 
 		return;
 	}
 
-	/*
-	CS6Packet victoryPacketToSend;
-	victoryPacketToSend.packetType = TYPE_Victory;
+	if ( durationSinceLastDisplay > TIME_DIF_FOR_GAME_ROOM_UPDATE ) {
 
-	victoryPacketToSend.timestamp = cbutil::getCurrentTimeSeconds();
-	victoryPacketToSend.data.victorious.playerColorAndID[0] = victoryPacketFromWinner.data.victorious.playerColorAndID[0];
-	victoryPacketToSend.data.victorious.playerColorAndID[1] = victoryPacketFromWinner.data.victorious.playerColorAndID[1];
-	victoryPacketToSend.data.victorious.playerColorAndID[2] = victoryPacketFromWinner.data.victorious.playerColorAndID[2];
+		ConnectedUDPClient* gameUser = nullptr;
+
+		std::set<ConnectedUDPClient*>::iterator itGam;
+
+		printf( "\n\n		*********** GameRoom# %d ********** \n", m_gameRoomNum );
 
 
-	std::set<ConnectedUDPClient*>::iterator itClient;
-	for ( itClient = m_players.begin(); itClient != m_players.end(); ++itClient ) {
+		for ( itGam = m_players.begin(); itGam != m_players.end(); ++itGam ) {
 
-		ConnectedUDPClient* client = *(itClient);
-		victoryPacketToSend.playerColorAndID[0] = client->m_red;
-		victoryPacketToSend.playerColorAndID[1] = client->m_green;
-		victoryPacketToSend.playerColorAndID[2] = client->m_blue;
-		victoryPacketToSend.packetNumber = m_server->m_currentAckCount;
+			gameUser = *(itGam);
+			if ( gameUser != nullptr ) {
 
-		m_server->sendPacket( victoryPacketToSend, client, true );
-		
-		CS6Packet resetPacketToSend;
-		resetPacketToSend.packetType = TYPE_Reset;
-		resetPacketToSend.playerColorAndID[0] = client->m_red;
-		resetPacketToSend.playerColorAndID[1] = client->m_green;
-		resetPacketToSend.playerColorAndID[2] = client->m_blue;
-		resetPacketToSend.timestamp = cbutil::getCurrentTimeSeconds();
-		resetPacketToSend.packetNumber = m_server->m_currentAckCount;
+				printf( "	User: %s is currently connected to GameRoom# %d with score %d \n", gameUser->m_userID.c_str(), m_gameRoomNum, gameUser->m_score );
+			}
+		}
 
-		resetPacketToSend.data.reset.flagXPosition = m_server->m_flag.m_xPos;
-		resetPacketToSend.data.reset.flagYPosition = m_server->m_flag.m_yPos;
-		resetPacketToSend.data.reset.playerXPosition = client->m_position.x;
-		resetPacketToSend.data.reset.playerYPosition = client->m_position.y;
-		resetPacketToSend.data.reset.playerColorAndID[0] = client->m_red;
-		resetPacketToSend.data.reset.playerColorAndID[1] = client->m_green;
-		resetPacketToSend.data.reset.playerColorAndID[2] = client->m_blue;
+		//printf( "\n		*************************************************** \n" );
+		printf( "\n" );
 
-	
-		m_server->sendPacket( resetPacketToSend,client, true );
+		durationSinceLastDisplay = 0.0;
 	}
-	*/
+
+	lastTimeStampForDisplay = cbutil::getCurrentTimeSeconds();
 }
 
 
@@ -437,4 +562,7 @@ void GameRoom::setGameRoomDefaults() {
 	m_owner = nullptr;
 	m_lobby = nullptr;
 	m_gameRoomNum = 0;
+
+	lastTimeStampForDisplay = cbutil::getCurrentTimeSeconds();
+	durationSinceLastDisplay = 0.0;
 }

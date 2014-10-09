@@ -26,6 +26,7 @@ void GameLobby::createGameRooms() {
 	for ( size_t i = 1; i <= NUM_GAME_ROOMS; ++i ) {
 
 		GameRoom* room = new GameRoom( i, nullptr, m_server, this );
+		room->m_gameRoomNum = i;
 		m_gameRooms.push_back( room );
 	}
 }
@@ -187,12 +188,13 @@ void GameLobby::OnClientPacketReceived( ConnectedUDPClient* client, const FinalP
 
 					m_server->sendPacket( joinAckPacket, client, false ); 
 
-					printf( "JoinGame packet received from User %s \n", lobbyClient->m_userID.c_str() );
+					printf( "\nJoinGame packet received from User %s \n", lobbyClient->m_userID.c_str() );
 
 					roomToJoin->addPlayer( client, false );
 					m_lobbyUsers.erase( client );
 
 				} else {
+
 					// Room is not created :: Send Nack
 					FinalPacket joinNackPacket;
 
@@ -208,27 +210,45 @@ void GameLobby::OnClientPacketReceived( ConnectedUDPClient* client, const FinalP
 
 					m_server->sendPacket( joinNackPacket, client, false );
 
-					printf( "Warning-> Client %s is attempting to join a game that has not been created\n", lobbyClient->m_userID.c_str() );
-
+					printf( "\nWarning-> Client %s is attempting to join a game %d that has not been created\n", lobbyClient->m_userID.c_str(), clientPacket.data.joining.room );
+					
 				}
 
 			} else {
-				// Bad room ID
-				FinalPacket joinNackPacket;
 
-				// Header
-				joinNackPacket.type = TYPE_Nack;
-				joinNackPacket.timestamp = cbutil::getCurrentTimeSeconds();
-				joinNackPacket.clientID = client->m_clientID;
+				if ( roomNumToJoin == ROOM_Lobby ) {
 
-				// Data
-				joinNackPacket.data.refused.errorCode = ERROR_RoomEmpty;
-				joinNackPacket.data.refused.type = TYPE_JoinRoom;
-				joinNackPacket.data.refused.number = clientPacket.number;
+					FinalPacket newPlayerLobbyPacket;
+					// Header
+					newPlayerLobbyPacket.type = TYPE_Ack;
+					newPlayerLobbyPacket.timestamp = cbutil::getCurrentTimeSeconds();
+					newPlayerLobbyPacket.clientID = client->m_clientID;
 
-				m_server->sendPacket( joinNackPacket, client, false );
+					// Data
+					newPlayerLobbyPacket.data.acknowledged.number = clientPacket.number;
+					newPlayerLobbyPacket.data.acknowledged.type = TYPE_JoinRoom;
 
-				printf( "Warning-> Client %s is attempting to join a game that does NOT exist\n", lobbyClient->m_userID.c_str() );
+					m_server->sendPacket( newPlayerLobbyPacket, client, false );
+
+				} else {
+
+					// Bad room ID
+					FinalPacket joinNackPacket;
+
+					// Header
+					joinNackPacket.type = TYPE_Nack;
+					joinNackPacket.timestamp = cbutil::getCurrentTimeSeconds();
+					joinNackPacket.clientID = client->m_clientID;
+
+					// Data
+					joinNackPacket.data.refused.errorCode = ERROR_RoomEmpty;
+					joinNackPacket.data.refused.type = TYPE_JoinRoom;
+					joinNackPacket.data.refused.number = clientPacket.number;
+
+					m_server->sendPacket( joinNackPacket, client, false );
+
+					printf( "Warning-> Client %s is attempting to join a game that does NOT exist\n", lobbyClient->m_userID.c_str() );
+				}
 			}
 		
 		} else if ( clientPacket.type == TYPE_CreateRoom ) {
@@ -313,7 +333,7 @@ void GameLobby::OnClientPacketReceived( ConnectedUDPClient* client, const FinalP
 
 		} else {
 
-			printf( "Warning-> Client %s is sending a packet type which is not supported for the GameLobby \n", lobbyClient->m_userID.c_str() );
+			printf( "Warning-> Client %s is sending a packet type %d which is not supported for the GameLobby \n", lobbyClient->m_userID.c_str(), clientPacket.type );
 		}
 
 	} else {
@@ -328,7 +348,7 @@ void GameLobby::addUserToLobby( ConnectedUDPClient* userToAdd ) {
 
 	if ( userToAdd == nullptr ) {
 
-		printf( "Warning-> Cannot add a client to the lobby that has the value of nullptr\n" );
+		printf( "\nWarning-> Cannot add a client to the lobby that has the value of nullptr\n" );
 		return;
 	}
 
@@ -338,12 +358,12 @@ void GameLobby::addUserToLobby( ConnectedUDPClient* userToAdd ) {
 	itLob = m_lobbyUsers.find( userToAdd );
 	if ( itLob != m_lobbyUsers.end() ) {
 
-		printf( "Warning-> User already exists in the lobby! Cannot add to lobby twice\n" );
+		printf( "\nWarning-> User already exists in the lobby! Cannot add to lobby twice\n" );
 		userToAdd->m_isInLobby = true;
 
 	} else {
 
-		printf( "User: %s has been successfully added to the Game Lobby\n", userToAdd->m_userID.c_str() );
+		printf( "\nUser: %s has been successfully added to the Game Lobby\n", userToAdd->m_userID.c_str() );
 		m_lobbyUsers.insert( userToAdd );
 	}
 }
@@ -353,7 +373,7 @@ void GameLobby::removeClientDueToInactivity( ConnectedUDPClient* clientToRemove 
 
 	if ( clientToRemove == nullptr ) {
 
-		printf( "Warning-> Cannot remove a client with the value of nullptr from the lobby\n" );
+		printf( "\nWarning-> Cannot remove a client with the value of nullptr from the lobby\n" );
 		return;
 	}
 
@@ -373,7 +393,7 @@ void GameLobby::removeClientDueToInactivity( ConnectedUDPClient* clientToRemove 
 					wasOwner = true;
 					room->endGameRoom();
 
-					printf( "User %s being removed was the game room owner of room %d.", clientToRemove->m_userID.c_str(), clientToRemove->m_gameID );
+					printf( "\n\nUser %s being removed was the game room owner of room %d.", clientToRemove->m_userID.c_str(), clientToRemove->m_gameID );
 				}
 			}
 		}
@@ -384,13 +404,13 @@ void GameLobby::removeClientDueToInactivity( ConnectedUDPClient* clientToRemove 
 
 	if ( itLob != m_lobbyUsers.end() ) {
 
-		printf( "User %s has been removed from the Game Lobby due to inactivity\n", clientToRemove->m_userID.c_str() );
+		printf( "\n\nUser %s has been removed from the Game Lobby due to inactivity\n", clientToRemove->m_userID.c_str() );
 		clientToRemove->m_isInLobby = false;
 		m_lobbyUsers.erase( itLob );
 
 	} else {
 
-		printf( "Warning-> User did not exist in the lobby and cannot be removed due to inactivity\n" );
+		printf( "\nWarning-> User did not exist in the lobby and cannot be removed due to inactivity\n" );
 	}
 }
 
@@ -469,7 +489,7 @@ void GameLobby::printListOfLobbyUsers() {
 
 	std::set<ConnectedUDPClient*>::iterator itLob;
 
-	printf( "\n-----------------------------------------------------------------------\n" );
+	printf( "\n\n -------------------LOBBY USER LIST ---------------------- \n\n" );
 
 	if ( m_lobbyUsers.empty() ) {
 
@@ -485,7 +505,7 @@ void GameLobby::printListOfLobbyUsers() {
 		}
 	}
 
-	printf( "\n-----------------------------------------------------------------------\n" );
+	printf( "\n\n --------------------------------------------------------- \n\n" );
 }
 
 

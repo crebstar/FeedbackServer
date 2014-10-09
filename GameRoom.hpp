@@ -8,7 +8,8 @@
 
 #include "FinalPacket.hpp"
 
-const int WINNING_SCORE_NUM = 10;
+const int WINNING_SCORE_NUM = 3;
+const double TIME_DIF_FOR_GAME_ROOM_UPDATE = 10.0;
 
 class ConnectedUDPClient;
 class UDPServer;
@@ -21,6 +22,7 @@ public:
 	explicit GameRoom( unsigned int gameRoomNum, ConnectedUDPClient* owner, UDPServer* server, GameLobby* lobby );
 
 	void updateGameRoom();
+	void displayConnectedUsers();
 	void checkForWinCondition();
 
 	void addPlayer( ConnectedUDPClient* playerToAdd, bool isOwner = false );
@@ -38,7 +40,7 @@ public:
 protected:
 
 	void sendUpdatePacketsToPlayers();
-	void sendVictoryAndResetPacketToAllClients( const FinalPacket& victoryPacketFromWinner );
+	void sendFirePacketToAllPlayers( const FinalPacket& firePacket );
 
 	void validateFireAndSendHitPackets( ConnectedUDPClient* firingClient, const FinalPacket& firePacket );
 	void resetPlayer( ConnectedUDPClient* playerToReset );
@@ -55,6 +57,8 @@ private:
 
 	double								durationSinceLastPacketUpdate;
 	double								lastTimeStampSeconds;
+	double								lastTimeStampForDisplay;
+	double								durationSinceLastDisplay;
 };
 
 

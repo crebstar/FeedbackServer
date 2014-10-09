@@ -1,0 +1,39 @@
+﻿Build started 10/7/2014 4:39:17 PM.
+     1>Project "C:\Users\AW 18\Dropbox\GuildHall\Projects\FeedbackServer\FeedbackServer\FeedbackServer.vcxproj" on node 2 (rebuild target(s)).
+     1>InitializeBuildStatus:
+         Creating "Release\FeedbackServer.unsuccessfulbuild" because "AlwaysCreate" was specified.
+       ClCompile:
+         C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\CL.exe /c /Zi /nologo /W3 /WX- /O2 /Oi /Oy- /GL /D WIN32 /D NDEBUG /D _CONSOLE /D _UNICODE /D UNICODE /Gm- /EHsc /MD /GS /Gy /fp:precise /Zc:wchar_t /Zc:forScope /Fo"Release\\" /Fd"Release\vc100.pdb" /Gd /TP /analyze- /errorReport:prompt ConnectedUDPClient.cpp CTFlag.cpp GameLobby.cpp GameRoom.cpp main.cpp UDPServer.cpp
+         ConnectedUDPClient.cpp
+         CTFlag.cpp
+         GameLobby.cpp
+         GameRoom.cpp
+     1>GameRoom.cpp(274): warning C4018: '<' : signed/unsigned mismatch
+         main.cpp
+     1>main.cpp(21): warning C4005: 'UNUSED' : macro redefinition
+                 c:\users\aw 18\dropbox\guildhall\projects\feedbackserver\feedbackserver\../../CBEngine/EngineCode/EngineMacros.hpp(13) : see previous definition of 'UNUSED'
+         UDPServer.cpp
+     1>UDPServer.cpp(43): warning C4244: 'argument' : conversion from 'time_t' to 'unsigned int', possible loss of data
+     1>UDPServer.cpp(167): warning C4996: 'itoa': The POSIX name for this item is deprecated. Instead, use the ISO C++ conformant name: _itoa. See online help for details.
+                 C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\include\stdlib.h(867) : see declaration of 'itoa'
+       Link:
+         C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\link.exe /ERRORREPORT:PROMPT /OUT:"C:\Users\AW 18\Dropbox\GuildHall\Projects\FeedbackServer\FeedbackServer\Release\FeedbackServer.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /ManifestFile:"Release\FeedbackServer.exe.intermediate.manifest" /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /DEBUG /PDB:"C:\Users\AW 18\Dropbox\GuildHall\Projects\FeedbackServer\FeedbackServer\Release\FeedbackServer.pdb" /SUBSYSTEM:CONSOLE /OPT:REF /OPT:ICF /LTCG /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:\Users\AW 18\Dropbox\GuildHall\Projects\FeedbackServer\FeedbackServer\Release\FeedbackServer.lib" /MACHINE:X86 Release\ConnectedUDPClient.obj
+         Release\CTFlag.obj
+         Release\GameLobby.obj
+         Release\GameRoom.obj
+         Release\main.obj
+         Release\UDPServer.obj
+         "C:\Users\AW 18\Dropbox\GuildHall\Projects\FeedbackServer\CBEngine.lib"
+         Generating code
+         Finished generating code
+         FeedbackServer.vcxproj -> C:\Users\AW 18\Dropbox\GuildHall\Projects\FeedbackServer\FeedbackServer\Release\FeedbackServer.exe
+       Manifest:
+         C:\Program Files (x86)\Microsoft SDKs\Windows\v7.0A\bin\mt.exe /nologo /verbose /outputresource:"C:\Users\AW 18\Dropbox\GuildHall\Projects\FeedbackServer\FeedbackServer\Release\FeedbackServer.exe;#1" /manifest Release\FeedbackServer.exe.intermediate.manifest
+       FinalizeBuildStatus:
+         Deleting file "Release\FeedbackServer.unsuccessfulbuild".
+         Touching "Release\FeedbackServer.lastbuildstate".
+     1>Done Building Project "C:\Users\AW 18\Dropbox\GuildHall\Projects\FeedbackServer\FeedbackServer\FeedbackServer.vcxproj" (rebuild target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:04.44
